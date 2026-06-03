@@ -17,20 +17,15 @@ jobs:
 
       - name: Download and Inject KernelSU Next Directly
         run: |
-          # تنظيف شامل لأي مخلفات سابقة
           rm -rf drivers/kernelsu
           
-          # جلب المستودع في مجلد مؤقت أولاً
+          # جلب المستودع
           git clone --depth=1 https://github.com/rifsxd/KernelSU-Next.git temp_ksu
-          
-          # إنشاء المجلد النهائي ونقل الملفات البرمجية الأساسية من مجلد kernel الفرعي
           mkdir -p drivers/kernelsu
           cp -r temp_ksu/kernel/* drivers/kernelsu/
-          
-          # تنظيف المجلد المؤقت
           rm -rf temp_ksu
 
-          # ربط المجلد يدوياً وبشكل آمن داخل شجرة النواة
+          # ربط المجلد داخل شجرة النواة
           if [ -f "drivers/Makefile" ]; then
             if ! grep -q "kernelsu" drivers/Makefile; then
               echo "obj-y += kernelsu/" >> drivers/Makefile
@@ -43,13 +38,20 @@ jobs:
             fi
           fi
 
-          # الترقيع المتوافق مع ملفات النظام لنواة 4.19 القديمة لسامسونج
+          # ترقيع ملف fs/exec.c بطريقة آمنة ومتوافقة مع سامسونج
           if [ -f "fs/exec.c" ]; then
-            sed -i '/search_binary_handler(bprm);/i \    extern int ksu_handle_execve(struct linux_binprm **bprm);\n    ksu_handle_execve(&bprm);' fs/exec.c
+            # تنظيف أي محاولة حقن قديمة أولاً
+            sed -i '/ksu_handle_execve/d' fs/exec.c
+            # حقن الكود قبل إرجاع القيمة (retval) في نهاية الدالة الأساسية
+            sed -i '/return retval;/i \    { extern int ksu_handle_execve(struct linux_binprm **bprm); ksu_handle_execve(&bprm); }' fs/exec.c
           fi
 
+          # ترقيع ملف fs/open.c بطريقة آمنة ومتوافقة مع سامسونج
           if [ -f "fs/open.c" ]; then
-            sed -i '/return vfs_open(path, f, current_cred());/i \    extern int ksu_handle_vfs_open(struct path *path, int *flags, const struct cred *cred);\n    ksu_handle_vfs_open(path, &f->f_mode, current_cred());' fs/open.c
+            # تنظيف أي محاولة حقن قديمة أولاً
+            sed -i '/ksu_handle_vfs_open/d' fs/open.c
+            # حقن الكود عند فتح الملفات مباشرة
+            sed -i '/return vfs_open(path, f, current_cred());/i \    { extern int ksu_handle_vfs_open(struct path *path, int *flags, const struct cred *cred); ksu_handle_vfs_open(path, &f->f_mode, current_cred()); }' fs/open.c
           fi
 
       - name: Start Kernel Build
@@ -58,11 +60,12 @@ jobs:
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
-          export KCFLAGS="-w -fno-strict-aliasing -Wno-implicit-function-declaration -Wno-extant-ptrauth -Wno-attribute-alias -Wno-error=attributes -fno-inline-functions" 
+          # إضافة معطيات التغاضي عن تحذيرات المترجم لملفات الـ fs المحقونة
+          export KCFLAGS="-w -fno-strict-aliasing -Wno-implicit-function-declaration -Wno-extant-ptrauth -Wno-attribute-alias -Wno-error=attributes -fno-inline-functions -DCONFIG_KSU" 
           
           make ARCH=arm64 a06_defconfig
 
-          # كتابة وتفعيل إعدادات الروت والحمايات
+          # تفعيل الإعدادات
           echo "CONFIG_KPROBES=y" >> .config
           echo "CONFIG_HAVE_KPROBES=y" >> .config
           echo "CONFIG_BLK_DEV_INITRD=y" >> .config
