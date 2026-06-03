@@ -19,7 +19,7 @@ jobs:
         run: |
           rm -rf drivers/kernelsu
           
-          # جلب النسخة الرسمية المستقرة والمتوافقة تماماً مع نواة 4.19
+          # جلب النسخة الرسمية المستقرة
           git clone --depth=1 https://github.com/tiann/KernelSU.git temp_ksu
           mkdir -p drivers/kernelsu
           cp -r temp_ksu/kernel/* drivers/kernelsu/
@@ -38,13 +38,13 @@ jobs:
             fi
           fi
 
-          # ترقيع ملف fs/exec.c
+          # ترقيع ملف fs/exec.c للحقن المباشر (بديل الـ Kprobes)
           if [ -f "fs/exec.c" ]; then
             git checkout fs/exec.c
             sed -i '/search_binary_handler(bprm);/i \    { extern int ksu_handle_execve(struct linux_binprm **bprm); ksu_handle_execve(&bprm); }' fs/exec.c
           fi
 
-          # ترقيع ملف fs/open.c
+          # ترقيع ملف fs/open.c للحقن المباشر (بديل الـ Kprobes)
           if [ -f "fs/open.c" ]; then
             git checkout fs/open.c
             sed -i '/return vfs_open(path, f, current_cred());/i \    { extern int ksu_handle_vfs_open(struct path *path, int *flags, const struct cred *cred); ksu_handle_vfs_open(path, &f->f_mode, current_cred()); }' fs/open.c
@@ -60,9 +60,9 @@ jobs:
           
           make ARCH=arm64 a06_defconfig
 
-          # تفعيل إعدادات الروت الرسمية المستقرة
-          echo "CONFIG_KPROBES=y" >> .config
-          echo "CONFIG_HAVE_KPROBES=y" >> .config
+          # إلغاء الحمايات والـ Kprobes المسببة للانهيار، وتفعيل الترقيع المباشر لـ KernelSU
+          echo "CONFIG_KPROBES=n" >> .config
+          echo "CONFIG_HAVE_KPROBES=n" >> .config
           echo "CONFIG_BLK_DEV_INITRD=y" >> .config
           echo "CONFIG_KSU=y" >> .config
           echo "CONFIG_STRICT_KERNEL_RWX=n" >> .config
