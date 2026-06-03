@@ -20,8 +20,15 @@ jobs:
           # تنظيف شامل لأي مخلفات سابقة
           rm -rf drivers/kernelsu
           
-          # جلب المستودع الرسمي مباشرة من الإنترنت داخل السيرفر لضمان سلامة الملفات
-          git clone --depth=1 https://github.com/rifsxd/KernelSU-Next.git drivers/kernelsu
+          # جلب المستودع في مجلد مؤقت أولاً
+          git clone --depth=1 https://github.com/rifsxd/KernelSU-Next.git temp_ksu
+          
+          # إنشاء المجلد النهائي ونقل الملفات البرمجية الأساسية من مجلد kernel الفرعي
+          mkdir -p drivers/kernelsu
+          cp -r temp_ksu/kernel/* drivers/kernelsu/
+          
+          # تنظيف المجلد المؤقت
+          rm -rf temp_ksu
 
           # ربط المجلد يدوياً وبشكل آمن داخل شجرة النواة
           if [ -f "drivers/Makefile" ]; then
