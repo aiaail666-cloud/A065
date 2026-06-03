@@ -1,0 +1,80 @@
+name: Build KernelSU Next Clean Step
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libssl-dev libncurses-dev bison flex bc libelf-dev gcc-aarch64-linux-gnu dos2unix git clang llvm lld unzip
+
+      - name: Extract and Prepare KernelSU Next
+        run: |
+          # فك ضغط الملف المرفوع ونقله للمسار الصحيح تلقائياً
+          mkdir -p drivers/kernelsu
+          unzip -q kernelsu.zip -d drivers/kernelsu/
+          
+          # تعديل مسار الملفات إذا كانت داخل مجلد فرعي بعد فك الضغط
+          if [ -d "drivers/kernelsu/KernelSU-Next-main" ]; then
+            mv drivers/kernelsu/KernelSU-Next-main/* drivers/kernelsu/
+            rm -rf drivers/kernelsu/KernelSU-Next-main
+          elif [ -d "drivers/kernelsu/KernelSU-Next-dev" ]; then
+            mv drivers/kernelsu/KernelSU-Next-dev/* drivers/kernelsu/
+            rm -rf drivers/kernelsu/KernelSU-Next-dev
+          fi
+
+          # ربط المجلد يدوياً وبشكل آمن داخل شجرة النواة
+          if [ -f "drivers/Makefile" ]; then
+            if ! grep -q "kernelsu" drivers/Makefile; then
+              echo "obj-y += kernelsu/" >> drivers/Makefile
+            fi
+          fi
+          
+          if [ -f "drivers/Kconfig" ]; then
+            if ! grep -q "kernelsu" drivers/Kconfig; then
+              sed -i '/endmenu/i \\tsource "drivers/kernelsu/Kconfig"' drivers/Kconfig
+            fi
+          fi
+
+          # الترقيع المتوافق مع ملفات النظام لنواة 4.19 القديمة لسامسونج
+          if [ -f "fs/exec.c" ]; then
+            sed -i '/search_binary_handler(bprm);/i \    extern int ksu_handle_execve(struct linux_binprm **bprm);\n    ksu_handle_execve(&bprm);' fs/exec.c
+          fi
+
+          if [ -f "fs/open.c" ]; then
+            sed -i '/return vfs_open(path, f, current_cred());/i \    extern int ksu_handle_vfs_open(struct path *path, int *flags, const struct cred *cred);\n    ksu_handle_vfs_open(path, &f->f_mode, current_cred());' fs/open.c
+          fi
+
+      - name: Start Kernel Build
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CC=clang
+          export KCFLAGS="-w -fno-strict-aliasing -Wno-implicit-function-declaration -Wno-extant-ptrauth -Wno-attribute-alias -Wno-error=attributes -fno-inline-functions" 
+          
+          make ARCH=arm64 a06_defconfig
+
+          # كتابة وتفعيل إعدادات الروت والحمايات
+          echo "CONFIG_KPROBES=y" >> .config
+          echo "CONFIG_HAVE_KPROBES=y" >> .config
+          echo "CONFIG_BLK_DEV_INITRD=y" >> .config
+          echo "CONFIG_KSU=y" >> .config
+          echo "CONFIG_KSU_NEXT=y" >> .config
+          echo "CONFIG_STRICT_KERNEL_RWX=n" >> .config
+          echo "CONFIG_MODULE_SIG=n" >> .config
+          
+          make ARCH=arm64 -j$(nproc)
+
+      - name: Upload Output Boot Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel_Boot_Image
+          path: arch/arm64/boot/Image*
