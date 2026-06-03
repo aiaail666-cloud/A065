@@ -1,4 +1,4 @@
-name: Build Stable KernelSU Clean Step
+name: Build KernelSU Legacy Mode
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Setup Build Environment
+      - name: Setup Compiler Environment
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libssl-dev libncurses-dev bison flex bc libelf-dev gcc-aarch64-linux-gnu dos2unix git clang llvm lld
@@ -51,7 +51,8 @@ jobs:
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
-          export KCFLAGS="-w -fno-strict-aliasing -Wno-implicit-function-declaration -Wno-attribute-alias -Wno-error=attributes -fno-inline-functions -DCONFIG_KSU" 
+          # تفعيل معطى CONFIG_KSUD_LEGACY_BIN ليتوافق الكود مع النواة القديمة
+          export KCFLAGS="-w -fno-strict-aliasing -Wno-implicit-function-declaration -Wno-attribute-alias -Wno-error=attributes -fno-inline-functions -DCONFIG_KSU -DCONFIG_KSUD_LEGACY_BIN" 
           
           make ARCH=arm64 a06_defconfig
 
@@ -67,5 +68,5 @@ jobs:
       - name: Upload Output Boot Image
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Boot_Image
+          name: Kernel_Boot_Image_Legacy
           path: arch/arm64/boot/Image*
