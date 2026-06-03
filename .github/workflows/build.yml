@@ -1,4 +1,4 @@
-name: Build KernelSU Next Clean Step
+name: Build Stable KernelSU Clean Step
 
 on:
   workflow_dispatch:
@@ -15,12 +15,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libssl-dev libncurses-dev bison flex bc libelf-dev gcc-aarch64-linux-gnu dos2unix git clang llvm lld
 
-      - name: Download and Inject KernelSU Next Directly
+      - name: Download and Inject Official KernelSU
         run: |
           rm -rf drivers/kernelsu
           
-          # جلب المستودع النظيف
-          git clone --depth=1 https://github.com/rifsxd/KernelSU-Next.git temp_ksu
+          # جلب النسخة الرسمية المستقرة والمتوافقة تماماً مع نواة 4.19
+          git clone --depth=1 https://github.com/tiann/KernelSU.git temp_ksu
           mkdir -p drivers/kernelsu
           cp -r temp_ksu/kernel/* drivers/kernelsu/
           rm -rf temp_ksu
@@ -38,12 +38,9 @@ jobs:
             fi
           fi
 
-          # ترقيع ملف fs/exec.c في المكان الصحيح تماماً (قبل دالة البحث عن المشغلات الثنائية)
+          # ترقيع ملف fs/exec.c
           if [ -f "fs/exec.c" ]; then
-            # استعادة الملف الأصلي النظيف للتخلص من أي حقن خاطئ سابق
             git checkout fs/exec.c
-            
-            # الحقن الذكي قبل السطر الشهير search_binary_handler
             sed -i '/search_binary_handler(bprm);/i \    { extern int ksu_handle_execve(struct linux_binprm **bprm); ksu_handle_execve(&bprm); }' fs/exec.c
           fi
 
@@ -63,12 +60,11 @@ jobs:
           
           make ARCH=arm64 a06_defconfig
 
-          # تفعيل الإعدادات
+          # تفعيل إعدادات الروت الرسمية المستقرة
           echo "CONFIG_KPROBES=y" >> .config
           echo "CONFIG_HAVE_KPROBES=y" >> .config
           echo "CONFIG_BLK_DEV_INITRD=y" >> .config
           echo "CONFIG_KSU=y" >> .config
-          echo "CONFIG_KSU_NEXT=y" >> .config
           echo "CONFIG_STRICT_KERNEL_RWX=n" >> .config
           echo "CONFIG_MODULE_SIG=n" >> .config
           
