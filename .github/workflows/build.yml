@@ -17,18 +17,24 @@ jobs:
 
       - name: Extract and Prepare KernelSU Next
         run: |
-          # فك ضغط الملف المرفوع ونقله للمسار الصحيح تلقائياً
-          mkdir -p drivers/kernelsu
-          unzip -q kernelsu.zip -d drivers/kernelsu/
+          # إنشاء المجلد الموقت وفك الضغط بداخله
+          mkdir -p temp_ksu
+          unzip -q kernelsu.zip -d temp_ksu/
           
-          # تعديل مسار الملفات إذا كانت داخل مجلد فرعي بعد فك الضغط
-          if [ -d "drivers/kernelsu/KernelSU-Next-main" ]; then
-            mv drivers/kernelsu/KernelSU-Next-main/* drivers/kernelsu/
-            rm -rf drivers/kernelsu/KernelSU-Next-main
-          elif [ -d "drivers/kernelsu/KernelSU-Next-dev" ]; then
-            mv drivers/kernelsu/KernelSU-Next-dev/* drivers/kernelsu/
-            rm -rf drivers/kernelsu/KernelSU-Next-dev
+          # إنشاء المجلد النهائي في الدرایفرز
+          mkdir -p drivers/kernelsu
+          
+          # نقل الملفات بذكاء من أي مجلد فرعي نتج عن ضغط الماك
+          if [ -d temp_ksu/kernelsu ]; then
+            cp -r temp_ksu/kernelsu/* drivers/kernelsu/
+          elif ls temp_ksu/*/Kconfig >/dev/null 2>&1; then
+            cp -r temp_ksu/*/* drivers/kernelsu/
+          else
+            cp -r temp_ksu/* drivers/kernelsu/
           fi
+          
+          # تنظيف الملفات المؤقتة
+          rm -rf temp_ksu
 
           # ربط المجلد يدوياً وبشكل آمن داخل شجرة النواة
           if [ -f "drivers/Makefile" ]; then
